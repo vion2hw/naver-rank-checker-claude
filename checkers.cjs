@@ -114,8 +114,10 @@ function readApollo(html) {
   const end = html.indexOf('};', start);
   try { return JSON.parse(html.slice(start, end + 1)); } catch { return null; }
 }
-// 통검 플레이스 영역은 화살표 5페이지(약 30위)까지만 보이므로 기본 판정선은 30위다.
-const PLACE_LIMIT = 30;
+// 플레이스 순위: 네이버 플레이스 목록(관련도순, 광고 제외) 50위까지 순위만 본다.
+// 통검 플레이스 영역과 순서가 같고(청주치과 27위·금천동치과 1위 대조), 광고 개수에 영향받지 않는다.
+// 브라우저 없이 목록 한 번만 받아서 빠르고 가볍다(2026-11-26 사용자 결정).
+const PLACE_LIMIT = 50;
 async function checkPlaceMap(keyword, targets, opt = {}) {
   const limit = opt.placeLimit || PLACE_LIMIT;
   const url = 'https://pcmap.place.naver.com/place/list?query=' + encodeURIComponent(keyword);
@@ -152,7 +154,7 @@ async function checkPlaceMap(keyword, targets, opt = {}) {
     total: biz.total, checked: list.length,
     ad: adHit >= 0 ? '광고 ' + (adHit + 1) + '번째 노출' : '',
     top: list.slice(0, 10).map(x => x.rank + '. ' + x.name),
-    note: (hits.length && hits[0].rank > limit ? '지도 목록 ' + hits[0].rank + '위 · ' : '') + '통검 5페이지(' + limit + '위)까지 판정', url: res.url,
+    basis: '플레이스 목록', note: '관련도순 ' + limit + '위까지 확인(전체 ' + (biz.total || '?') + '곳)', url: res.url,
   };
 }
 
@@ -160,7 +162,8 @@ async function checkPlaceMap(keyword, targets, opt = {}) {
 // 페이지마다 광고 수가 달라 일반 업체 수가 바뀌므로, 광고(ader 링크)는 순위에서 빼고 페이지별 광고 수를 함께 적는다.
 // 영역이 없거나 읽지 못하면 네이버 지도 목록 순위(checkPlaceMap)로 대체한다.
 const PC_VIEW = { viewport: { width: 1280, height: 900 } };
-async function checkPlace(keyword, targets, opt = {}) {
+// (예전 방식, 지금은 안 씀) 통검 플레이스 영역을 화살표로 5페이지까지 넘기며 세기
+async function checkPlacePaged(keyword, targets, opt = {}) {
   const maxPages = opt.placePages || 5;
   const url = 'https://search.naver.com/search.naver?query=' + encodeURIComponent(keyword);
   let ctxPc = null;
@@ -227,6 +230,10 @@ async function checkPlace(keyword, targets, opt = {}) {
   } catch (e) {
     return await fallback('통검 확인 오류(' + e.message.slice(0, 60) + ')');
   } finally { if (ctxPc) await ctxPc.close().catch(() => {}); }
+}
+
+async function checkPlace(keyword, targets, opt = {}) {
+  return checkPlaceMap(keyword, targets, { ...opt, placeLimit: PLACE_LIMIT });
 }
 
 /* ---------------- 2. 통합검색 노출 순위 ---------------- */
