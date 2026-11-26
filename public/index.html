@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>네이버 순위체커</title>
+<style>
+  :root { --g:#03c75a; --gd:#02a84b; --bg:#f4f6f8; --line:#e3e7eb; --tx:#1d2329; --sub:#6b7680; --red:#e5484d; --blue:#2f6fed; --amber:#c47f00; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:'Pretendard','Malgun Gothic','맑은 고딕',sans-serif; background:var(--bg); color:var(--tx); font-size:14px; }
+  header { background:#fff; border-bottom:1px solid var(--line); padding:14px 24px; display:flex; align-items:center; gap:12px; }
+  header h1 { font-size:18px; margin:0; } header h1 b { color:var(--g); }
+  header .sub { color:var(--sub); font-size:13px; }
+  main { display:grid; grid-template-columns:380px 1fr; gap:18px; padding:18px 24px; align-items:start; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; }
+  label { display:block; font-weight:600; margin:12px 0 6px; } label:first-child { margin-top:0; }
+  label span { font-weight:400; color:var(--sub); font-size:12px; }
+  input, select, textarea { width:100%; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; background:#fff; }
+  textarea { resize:vertical; min-height:96px; line-height:1.5; }
+  .row2 { display:flex; gap:8px; } .row2 > * { flex:1; }
+  .kwbox { border:1px solid var(--line); border-radius:10px; padding:10px; margin-top:10px; }
+  .kwbox h3 { margin:0 0 6px; font-size:14px; display:flex; align-items:center; gap:6px; }
+  .kwbox h3 .n { margin-left:auto; color:var(--sub); font-weight:400; font-size:12px; }
+  .kwbox p { margin:0 0 6px; color:var(--sub); font-size:12px; }
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .btns { display:flex; gap:8px; margin-top:14px; }
+  button.main { flex:1; background:var(--g); color:#fff; border:0; border-radius:8px; padding:12px; font:inherit; font-weight:700; cursor:pointer; font-size:15px; }
+  button.main:hover { background:var(--gd); } button.main:disabled { background:#a9d9bd; cursor:default; }
+  button.sub { border:1px solid var(--line); background:#fff; border-radius:8px; padding:8px 12px; cursor:pointer; font:inherit; }
+  .tabs { display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; }
+  .tab { border:1px solid var(--line); background:#fff; padding:7px 14px; border-radius:20px; cursor:pointer; font-weight:600; color:var(--sub); font:inherit; font-weight:600; }
+  .tab.on { background:var(--tx); border-color:var(--tx); color:#fff; }
+  .tab .c { font-weight:400; opacity:.8; margin-left:4px; }
+  .top { display:flex; align-items:center; gap:12px; margin-bottom:8px; } .top .grow { flex:1; }
+  .bar { height:6px; background:#edf0f2; border-radius:3px; overflow:hidden; margin-bottom:12px; } .bar i { display:block; height:100%; width:0; background:var(--g); transition:width .3s; }
+  .summary { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+  .summary div { background:#f7f9fa; border-radius:8px; padding:8px 12px; font-size:13px; } .summary b { font-size:16px; }
+  table { width:100%; border-collapse:collapse; } th, td { padding:8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+  th { font-size:12px; color:var(--sub); font-weight:600; background:#fafbfc; position:sticky; top:0; }
+  td.rank { font-weight:700; font-size:15px; }
+  .st { display:inline-block; padding:2px 8px; border-radius:10px; font-size:12px; font-weight:600; white-space:nowrap; }
+  .st-노출, .st-클립있음 { background:#e6f8ee; color:var(--gd); } .st-순위밖, .st-미노출, .st-클립없음 { background:#f1f3f5; color:var(--sub); } .st-확인필요 { background:#fff4dc; color:var(--amber); }
+  .up { color:var(--red); font-weight:700; } .down { color:var(--blue); font-weight:700; } .new { color:var(--g); font-weight:700; }
+  .extra { color:var(--sub); font-size:12px; margin-top:3px; }
+  a { color:var(--blue); text-decoration:none; } a:hover { text-decoration:underline; }
+  details { margin-top:6px; font-size:12px; color:var(--sub); } details summary { cursor:pointer; } details ul { margin:4px 0; padding-left:18px; }
+  .empty { text-align:center; color:var(--sub); padding:40px 0; }
+  #log { margin-top:14px; background:#1d2329; color:#cfe8d9; font-family:Consolas,monospace; font-size:12px; border-radius:8px; padding:10px; height:110px; overflow:auto; white-space:pre-wrap; }
+  .warn { background:#fff4dc; color:#7a5300; border-radius:8px; padding:10px 12px; margin-bottom:10px; display:none; }
+  .filter { margin-left:auto; font-size:13px; color:var(--sub); display:flex; gap:6px; align-items:center; }
+  .filter input { width:auto; }
+  @media (max-width: 900px) { main { grid-template-columns:1fr; padding:12px; } header { padding:12px; } header .sub { display:none; } th, td { padding:7px 5px; } }
+</style>
+</head>
+<body>
+<header><h1><b>N</b> 순위체커</h1><span class="sub">업체와 키워드를 넣고 한 번에 플레이스 · 통검노출 · 통검클립을 확인합니다</span></header>
+<div id="login" style="display:none;position:fixed;inset:0;background:rgba(29,35,41,.55);z-index:9;align-items:center;justify-content:center;padding:20px">
+  <form id="pwForm" class="card" style="width:100%;max-width:340px">
+    <h2 style="margin:0 0 6px;font-size:18px"><b style="color:var(--g)">N</b> 순위체커</h2>
+    <p style="margin:0 0 12px;color:var(--sub);font-size:13px">접속 비밀번호를 입력하세요.</p>
+    <input id="pw" type="password" inputmode="numeric" autocomplete="current-password" placeholder="비밀번호">
+    <div id="pwMsg" style="color:var(--red);font-size:13px;min-height:18px;margin:6px 0"></div>
+    <button class="main" style="width:100%">들어가기</button>
+  </form>
+</div>
+<main>
+  <section class="card">
+    <label>업체</label>
+    <div class="row2"><select id="vendor"></select><button class="sub" id="addVendor" style="flex:0 0 auto">+ 새 업체</button></div>
+    <label>업체명</label>
+    <input id="vname" placeholder="예: 하얀미소치과의원">
+    <label>업체 식별어 <span>(쉼표 구분 · 업체명 일부, 플레이스 번호, 블로그·클립 아이디)</span></label>
+    <input id="ids" placeholder="예: 하얀미소, whitesmile001, 13248170">
+
+    <div class="kwbox"><h3><span class="dot" style="background:#03c75a"></span>플레이스 순위 <span class="n" id="n-place"></span></h3>
+      <p>통검 플레이스 영역 5페이지까지, 광고 제외 순위</p><textarea id="kw-place" placeholder="한 줄에 하나"></textarea></div>
+    <div class="kwbox"><h3><span class="dot" style="background:#2f6fed"></span>통검 노출 <span class="n" id="n-search"></span></h3>
+      <p>1페이지 웹·블로그·카페 목록 안 순위 (자사 / 외부 블로그 구분)</p><textarea id="kw-search" placeholder="한 줄에 하나"></textarea></div>
+    <div class="kwbox"><h3><span class="dot" style="background:#c47f00"></span>통검 클립 존재 여부 <span class="n" id="n-clip"></span></h3>
+      <p>통검에 클립 영역이 뜨는지만 빠르게 확인 (대량용, 키워드당 약 1~2초)</p><textarea id="kw-clip" placeholder="한 줄에 하나 · 엑셀 한 열 붙여넣기" style="min-height:140px"></textarea></div>
+
+    <div class="row2">
+      <div><label>순위 간격 <span>(초)</span></label><input id="delay" type="number" min="1" max="30" value="3"></div>
+      <div><label>클립 간격 <span>(초)</span></label><input id="clipDelay" type="number" min="0.5" max="10" step="0.5" value="1"></div>
+    </div>
+    <div class="btns"><button class="main" id="run">전체 검사 시작</button><button class="sub" id="stop" disabled>중지</button></div>
+    <div class="btns"><button class="sub" id="save" style="flex:1">업체·키워드 저장</button><button class="sub" id="openDir" style="flex:1">엑셀 다운로드</button></div>
+  </section>
+
+  <section class="card">
+    <div class="warn" id="warn"></div>
+    <div class="top"><b id="state">대기 중</b><span class="grow"></span><span id="count" style="color:var(--sub)"></span></div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="tabs">
+      <button class="tab on" data-k="place">플레이스<span class="c" id="c-place"></span></button>
+      <button class="tab" data-k="search">통검 노출<span class="c" id="c-search"></span></button>
+      <button class="tab" data-k="clip">통검 클립<span class="c" id="c-clip"></span></button>
+      <label class="filter" id="clipFilter" hidden><input type="checkbox" id="onlyYes"> 클립 있음만 보기</label>
+    </div>
+    <div class="summary" id="summary"></div>
+    <div style="max-height:calc(100vh - 360px); overflow:auto">
+      <table><thead id="thead"></thead><tbody id="rows"></tbody></table>
+    </div>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const KINDS = ['place','search','clip'];
+let settings = { vendors: [] }, running = false, view = 'place', total = 0, done = 0;
+let rows = { place: [], search: [], clip: [] };
+
+/* ---- 업체 설정 ---- */
+function countKw() { for (const k of KINDS) { const n = $('kw-' + k).value.split('\n').map(s => s.trim()).filter(Boolean).length; $('n-' + k).textContent = n ? n + '개' : ''; } }
+KINDS.forEach(k => $('kw-' + k).addEventListener('input', countKw));
+function fillVendor(i) {
+  const v = settings.vendors[i] || {};
+  $('vname').value = v.name || ''; $('ids').value = v.ids || '';
+  for (const k of KINDS) $('kw-' + k).value = v[k] || '';
+  countKw();
+}
+async function loadSettings() {
+  settings = await (await fetch('/api/settings')).json();
+  if (!settings.vendors.length) settings.vendors.push({ name: '새 업체', ids: '' });
+  $('vendor').innerHTML = settings.vendors.map((v, i) => `<option value="${i}">${esc(v.name)}</option>`).join('');
+  fillVendor(0); $('delay').value = settings.delaySec || 3; $('clipDelay').value = settings.clipDelaySec || 1;
+}
+$('vendor').onchange = () => fillVendor(+$('vendor').value);
+$('addVendor').onclick = () => {
+  settings.vendors.push({ name: '새 업체', ids: '', place: '', search: '', clip: '' });
+  $('vendor').insertAdjacentHTML('beforeend', `<option value="${settings.vendors.length - 1}">새 업체</option>`);
+  $('vendor').value = settings.vendors.length - 1; fillVendor(settings.vendors.length - 1); $('vname').select();
+};
+$('save').onclick = async () => {
+  const i = +$('vendor').value;
+  settings.vendors[i] = { name: $('vname').value.trim() || '업체', ids: $('ids').value, place: $('kw-place').value, search: $('kw-search').value, clip: $('kw-clip').value };
+  settings.delaySec = +$('delay').value || 3; settings.clipDelaySec = +$('clipDelay').value || 1;
+  await fetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(settings) });
+  $('vendor').options[i].textContent = settings.vendors[i].name;
+  $('save').textContent = '저장됨'; setTimeout(() => $('save').textContent = '업체·키워드 저장', 1200);
+};
+$('openDir').onclick = () => { if (!done) return alert('먼저 검사를 돌려 주세요.'); location.href = '/api/export'; };
+$('run').onclick = async () => {
+  const body = { vendor: $('vname').value.trim() || '업체', ids: $('ids').value,
+    place: $('kw-place').value, search: $('kw-search').value, clip: $('kw-clip').value,
+    opt: { delaySec: +$('delay').value || 3, clipDelaySec: +$('clipDelay').value || 1 } };
+  const r = await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json(); if (j.error) return alert(j.error);
+  lastSig = ''; lastKind = ''; rows = { place: [], search: [], clip: [] }; setRunning(true); connect();
+};
+$('stop').onclick = () => { fetch('/api/stop', { method: 'POST' }); $('stop').disabled = true; };
+
+/* ---- 결과 표 ---- */
+const HEAD = {
+  place: '<tr><th style="width:120px">키워드</th><th style="width:70px">결과</th><th style="width:90px">순위</th><th style="width:100px">이전 대비</th><th>내용</th></tr>',
+  search: '<tr><th style="width:120px">키워드</th><th style="width:70px">결과</th><th style="width:160px">목록 순위</th><th style="width:100px">이전 대비</th><th>내용</th></tr>',
+  clip: '<tr><th>키워드</th><th style="width:110px">통검 클립</th><th style="width:110px">이전 대비</th><th>참고</th></tr>',
+};
+function changeHtml(c) {
+  if (!c) return '<span style="color:var(--sub)">첫 기록</span>';
+  if (c.startsWith('▲')) return `<span class="up">${c}</span>`;
+  if (c.startsWith('▼')) return `<span class="down">${c}</span>`;
+  if (c === '신규') return '<span class="new">신규</span>';
+  if (c === '이탈') return '<span class="down">이탈</span>';
+  return '<span style="color:var(--sub)">변동 없음</span>';
+}
+function rowHtml(r) {
+  const kw = `<td><a href="${esc(r.url)}" target="_blank">${esc(r.keyword)}</a></td>`;
+  const st = `<span class="st st-${esc((r.status || '').replace(/\s/g, ''))}">${esc(r.status)}</span>`;
+  if (r.kind === 'clip') {
+    return `<tr>${kw}<td>${st}</td><td>${changeHtml(r.change)}</td><td class="extra">${esc(r.detail || r.note)}</td></tr>`;
+  }
+  let more = '';
+  if (r.kind === 'search' && r.found && r.found.length > 1)
+    more += '<details><summary>노출 ' + r.found.length + '건 모두 보기</summary><ul>' + r.found.map(f => `<li>${f.rank}위 · [${esc(f.type)}] <b>${esc(f.by)}</b> · <a href="${esc(f.link)}" target="_blank">${esc(f.title)}</a></li>`).join('') + '</ul></details>';
+  if (r.top && r.top.length) more += '<details><summary>상위 10곳</summary><div>' + r.top.map(esc).join('<br>') + '</div></details>';
+  const red = /외부/.test(r.label || '') ? ' style="color:var(--red)"' : '';
+  return `<tr>${kw}<td>${st}</td><td class="rank"${red}>${esc(r.label)}</td><td>${changeHtml(r.change)}${r.prev ? `<div class="extra">이전 ${esc(r.prev)}</div>` : ''}</td>
+    <td><div>${r.link ? `<a href="${esc(r.link)}" target="_blank">${esc(r.detail || '열기')}</a>` : esc(r.detail || (r.status === '확인필요' ? r.note : ''))}</div>
+    <div class="extra">${esc([r.extra, r.status !== '확인필요' ? r.note : ''].filter(Boolean).join(' · '))}</div>${more}</td></tr>`;
+}
+function summaryHtml(k) {
+  const rs = rows[k]; if (!rs.length) return '';
+  const need = rs.filter(r => r.status === '확인필요').length;
+  if (k === 'clip') {
+    const yes = rs.filter(r => r.label === '있음').length;
+    return `<div>클립 있음 <b style="color:var(--gd)">${yes}</b></div><div>없음 <b>${rs.length - yes - need}</b></div>` + (need ? `<div>확인필요 <b style="color:var(--amber)">${need}</b></div>` : '');
+  }
+  const yes = rs.filter(r => r.rank).length;
+  const ext = k === 'search' ? rs.filter(r => /외부/.test(r.label || '')).length : 0;
+  return `<div>노출 <b style="color:var(--gd)">${yes}</b> / ${rs.length}</div>` + (k === 'search' ? `<div>그중 외부 글 <b style="color:var(--red)">${ext}</b></div>` : '') + (need ? `<div>확인필요 <b style="color:var(--amber)">${need}</b></div>` : '');
+}
+function render() {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.k === view));
+  for (const k of KINDS) $('c-' + k).textContent = rows[k].length ? rows[k].length : '';
+  $('clipFilter').hidden = view !== 'clip';
+  $('thead').innerHTML = HEAD[view];
+  let rs = rows[view];
+  if (view === 'clip' && $('onlyYes').checked) rs = rs.filter(r => r.label === '있음');
+  $('rows').innerHTML = rs.length ? rs.map(rowHtml).join('') : `<tr><td colspan="5" class="empty">${running ? '확인 대기 중…' : '왼쪽에 키워드를 넣고 [전체 검사 시작]을 누르세요.'}</td></tr>`;
+  $('summary').innerHTML = summaryHtml(view);
+}
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => { view = t.dataset.k; render(); });
+$('onlyYes').onchange = render;
+
+function setRunning(v) { running = v; $('run').disabled = v; $('stop').disabled = !v; $('run').textContent = v ? '검사 중…' : '전체 검사 시작'; }
+function logLine(l) {
+  $('log').textContent += l + '\n'; $('log').scrollTop = 1e9;
+  if (l.includes('보안 확인이 떴')) { $('warn').style.display = 'block'; $('warn').textContent = l; }
+  if (l.includes('보안 확인 완료')) $('warn').style.display = 'none';
+}
+const NAME = { place: '플레이스', search: '통검 노출', clip: '통검 클립' };
+/* ---- 로그인 후 상태 받아오기 ----
+   무료 링크(터널)에서는 실시간 전송이 막히므로 1.5초마다 서버에 현재 상태를 물어 화면을 그린다. */
+let pollTimer = null, lastSig = '', lastKind = '';
+async function poll() {
+  try {
+    const r = await fetch('/api/state', { cache: 'no-store' });
+    if (r.status === 401) { clearInterval(pollTimer); return showLogin(); }
+    const j = await r.json();
+    if (!j) return stopPolling();
+    // 검사가 끝났으면 묻기를 멈춘다(무료 링크 서비스의 월 요청 수를 아끼려고).
+    if (!j.running) stopPolling();
+    const sig = j.done + '|' + j.log.length + '|' + j.running;
+    if (sig === lastSig) return;
+    lastSig = sig;
+    rows = j.rows; total = j.total; done = j.done;
+    if (j.running && j.current && j.current !== lastKind) { lastKind = j.current; view = j.current; }
+    setRunning(j.running);
+    $('state').textContent = j.running ? j.vendor + ' 검사 중' : '완료';
+    $('bar').style.width = (total ? done / total * 100 : 0) + '%';
+    $('count').textContent = j.running ? `${done} / ${total}` + (j.current ? ` · ${NAME[j.current]} · ${j.curKeyword || ''}` : '') : `${done}개 확인`;
+    $('log').textContent = j.log.join('\n') + '\n'; $('log').scrollTop = 1e9;
+    render();
+  } catch {}
+}
+function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+// 검사 중일 때만 2초마다 진행 상황을 물어온다. 처음 열 때는 한 번만 물어 진행 중인 검사가 있으면 이어서 본다.
+function connect() { stopPolling(); pollTimer = setInterval(poll, 2000); poll(); }
+function showLogin(msg) { $('login').style.display = 'flex'; $('pwMsg').textContent = msg || ''; $('pw').focus(); }
+$('pwForm').onsubmit = async ev => {
+  ev.preventDefault();
+  const r = await fetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: $('pw').value }) });
+  const j = await r.json();
+  if (!j.ok) return showLogin(j.error);
+  $('login').style.display = 'none'; start();
+};
+async function start() {
+  const r = await fetch('/api/settings');
+  if (r.status === 401) return showLogin();
+  settings = await r.json();
+  if (!settings.vendors.length) settings.vendors.push({ name: '새 업체', ids: '' });
+  $('vendor').innerHTML = settings.vendors.map((v, i) => `<option value="${i}">${esc(v.name)}</option>`).join('');
+  fillVendor(0); $('delay').value = settings.delaySec || 3; $('clipDelay').value = settings.clipDelaySec || 1;
+  connect();
+}
+render(); start();
+</script>
+</body>
+</html>

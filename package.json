@@ -1,0 +1,1 @@
+{"name":"naver-rank-checker","version":"1.0.0","private":true,"main":"server.cjs","dependencies":{"exceljs":"^4.4.0","playwright-core":"1.65.1"}}
