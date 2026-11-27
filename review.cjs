@@ -147,7 +147,8 @@ async function review({ vendor = '', ids = '', banned = '', keyword = '', title 
     if (title && !kw.inTitle) notes.push({ level: '주의', text: `제목에 "${keyword}"가 없습니다` });
     if (kw.count === 0) notes.push({ level: '주의', text: `본문에 "${keyword}"가 한 번도 없습니다` });
     if (kw.per1000 > 6) notes.push({ level: '주의', text: `키워드가 많습니다(1,000자당 ${kw.per1000}회) — 억지 반복은 피하기` });
-    if (guide && guide.kwCount && kw.count > guide.kwCount.max + 3) notes.push({ level: '주의', text: `상위 글(${guide.kwCount.min}~${guide.kwCount.max}회)보다 키워드가 많습니다(${kw.count}회)` });
+    // 상위 글이 키워드를 아예 안 쓰는 경우(0회)는 비교 의미가 없어 건너뛴다
+    if (guide && guide.kwCount && guide.kwCount.max > 0 && kw.count > guide.kwCount.max + 3) notes.push({ level: '주의', text: `상위 글(${guide.kwCount.min}~${guide.kwCount.max}회)보다 키워드가 많습니다(${kw.count}회)` });
   }
   if (guide && guide.chars) {
     if (chars < guide.chars.min * 0.8) notes.push({ level: '확인', text: `본문이 상위 글보다 짧습니다(${chars.toLocaleString()}자, 상위 ${guide.chars.min.toLocaleString()}~${guide.chars.max.toLocaleString()}자)` });
