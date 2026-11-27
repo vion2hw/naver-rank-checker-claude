@@ -75,6 +75,8 @@
     <div class="kwbox"><h3><span class="dot" style="background:#2f6fed"></span>통검 노출 키워드 <span class="n" id="n-search"></span></h3>
       <p>1페이지 웹·블로그·카페 목록 안 순위 (자사 / 외부 블로그 구분)<br>중요한 키워드는 위쪽에, 더 중요하면 앞에 <b>@</b> (예: @@청주치과) → 재발행 추천 순서</p><textarea id="kw-search" placeholder="한 줄에 하나 · 중요한 것부터&#10;@@청주치과&#10;@청주임플란트&#10;청주스케일링" style="min-height:200px"></textarea></div>
 
+    <label>검수 금지어 <span>(이 업체만 · 한 줄에 "표현 | 고칠 방향")</span></label>
+    <textarea id="banned" placeholder="예) 미백 | 이 업체는 제외 소재" style="min-height:70px"></textarea>
     <label>키워드 간 간격 <span>(초)</span></label><input id="delay" type="number" min="1" max="30" value="3">
     <div class="btns"><button class="main" id="run">통검 순위 확인</button><button class="sub" id="stop" disabled>중지</button></div>
     <div class="btns"><button class="sub" id="save" style="flex:1">업체·키워드 저장</button><button class="sub" id="openDir" style="flex:1">엑셀 다운로드</button></div>
@@ -88,6 +90,7 @@
       <button class="tab" data-k="reco">재발행 추천<span class="c" id="c-reco"></span></button>
       <button class="tab on" data-k="search">통검 순위<span class="c" id="c-search"></span></button>
       <button class="tab" data-k="guide">작성 가이드</button>
+      <button class="tab" data-k="review">원고 검수</button>
       <span id="clipFilter" hidden><input type="checkbox" id="onlyYes" hidden></span>
     </div>
     <div class="summary" id="summary"></div>
@@ -110,7 +113,7 @@ function countKw() { for (const k of KINDS) { const n = $('kw-' + k).value.split
 KINDS.forEach(k => $('kw-' + k).addEventListener('input', countKw));
 function fillVendor(i) {
   const v = settings.vendors[i] || {};
-  $('vname').value = v.name || ''; $('ids').value = v.ids || '';
+  $('vname').value = v.name || ''; $('ids').value = v.ids || ''; $('banned').value = v.banned || '';
   for (const k of KINDS) $('kw-' + k).value = v[k] || '';
   countKw();
 }
@@ -128,7 +131,7 @@ $('addVendor').onclick = () => {
 };
 $('save').onclick = async () => {
   const i = +$('vendor').value;
-  settings.vendors[i] = { ...(settings.vendors[i] || {}), name: $('vname').value.trim() || '업체', ids: $('ids').value, search: $('kw-search').value };
+  settings.vendors[i] = { ...(settings.vendors[i] || {}), name: $('vname').value.trim() || '업체', ids: $('ids').value, search: $('kw-search').value, banned: $('banned').value };
   settings.delaySec = +$('delay').value || 3;
   await fetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(settings) });
   $('vendor').options[i].textContent = settings.vendors[i].name;
@@ -234,8 +237,58 @@ function guideRows() {
   return g.posts.map(p => '<tr><td class="rank">' + p.rank + '</td><td>' + esc(p.type) + '</td><td><a href="' + esc(p.link) + '" target="_blank">' + esc(p.title || '(제목 없음)') + '</a>' + (p.source ? '<div class="extra">' + esc(p.source) + '</div>' : '') + '</td>' +
     (p.analyzed ? '<td>' + p.chars.toLocaleString() + '</td><td>' + p.images + '</td><td>' + p.headings + '</td><td>' + p.kwCount + '</td><td>' + esc(p.date) + '</td>' : '<td colspan="5" class="extra">' + esc(p.note || '') + '</td>') + '</tr>').join('');
 }
+/* ---- 원고 검수 ----
+   의료광고 위험 표현·업체 지침 금지어·키워드·문장 반복·자사 블로그 기존 글과 유사도를 점검한다. */
+let rv = { keyword: '', title: '', text: '' }, rvRes = null, rvBusy = false;
+const LV = { 위험: 'var(--red)', 주의: 'var(--amber)', 확인: 'var(--blue)' };
+async function runReview() {
+  rv = { keyword: $('rvKw').value.trim(), title: $('rvTitle').value.trim(), text: $('rvText').value };
+  if (!rv.text.trim()) return alert('본문을 붙여 넣어 주세요.');
+  rvBusy = true; rvRes = null; render();
+  const g = guideData && guideData.stats && rv.keyword && guideData.keyword === rv.keyword.replace(/^@+/, '') ? guideData.stats : null;
+  try {
+    const r = await fetch('/api/review', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ vendor: $('vname').value.trim(), ids: $('ids').value, banned: $('banned').value, ...rv, guide: g }) });
+    if (r.status === 401) return showLogin();
+    rvRes = await r.json();
+  } catch (e) { rvRes = { error: '검수하지 못했습니다(시간 초과 등).' }; }
+  rvBusy = false; if (view === 'review') render();
+}
+function reviewSummary() {
+  let h = '<div style="width:100%;display:flex;flex-direction:column;gap:6px">' +
+    '<div style="display:flex;gap:6px"><input id="rvKw" placeholder="목표 키워드 (예: 청주치과)" value="' + esc(rv.keyword) + '" style="flex:1"><input id="rvTitle" placeholder="제목" value="' + esc(rv.title) + '" style="flex:2"></div>' +
+    '<textarea id="rvText" placeholder="원고 본문을 붙여 넣으세요" style="min-height:180px">' + esc(rv.text) + '</textarea>' +
+    '<div style="display:flex;gap:8px;align-items:center"><button class="main" id="rvBtn" style="flex:0 0 auto;padding:8px 18px"' + (rvBusy ? ' disabled' : '') + '>' + (rvBusy ? '검수 중… (자사 블로그 비교 포함 10~30초)' : '검수하기') + '</button>' +
+    '<span class="extra">같은 키워드로 [작성 가이드]를 먼저 돌려 두면 글자 수·키워드 횟수도 상위 글과 비교합니다.</span></div></div>';
+  const r = rvRes;
+  if (r && r.error) h += '<div style="color:var(--red)">' + esc(r.error) + '</div>';
+  if (r && r.counts) {
+    const vc = r.verdict === '미달' ? 'var(--red)' : r.verdict === '통과' ? 'var(--gd)' : 'var(--amber)';
+    h += '<div style="width:100%"><b style="font-size:16px;color:' + vc + '">' + esc(r.verdict) + '</b> <span class="extra">위험 ' + r.counts.위험 + ' · 주의 ' + r.counts.주의 + ' · 확인 ' + r.counts.확인 + ' · 본문 ' + r.chars.toLocaleString() + '자' +
+      (r.kw ? ' · "' + esc(r.kw.keyword) + '" ' + r.kw.count + '회(1,000자당 ' + r.kw.per1000 + ')' + (r.kw.inTitle ? ' · 제목에 있음' : '') : '') + '</span>' +
+      (r.notes.length ? '<ul style="margin:6px 0 0;padding-left:18px;line-height:1.6">' + r.notes.map(n => '<li><b style="color:' + LV[n.level] + '">' + n.level + '</b> ' + esc(n.text) + '</li>').join('') + '</ul>' : '') +
+      (r.similar ? '<details style="margin-top:6px"' + (r.similar.list.some(x => x.score >= 30 || x.same.length) ? ' open' : '') + '><summary>자사 블로그 기존 글과 비교 (' + esc(r.similar.blogId || '-') + ' 최근 ' + r.similar.checked + '개)</summary>' +
+        (r.similar.note ? '<div>' + esc(r.similar.note) + '</div>' : '<ul>' + r.similar.list.map(x => '<li>' + x.score + '% · 같은 문장 ' + x.same.length + '개 · <a href="' + esc(x.link) + '" target="_blank">' + esc(x.title) + '</a> ' + esc(x.date) + (x.same.length ? '<div class="extra">' + x.same.map(esc).join('<br>') + '</div>' : '') + '</li>').join('') + '</ul>') + '</details>' : '') + '</div>';
+  }
+  return h;
+}
+function reviewRows() {
+  if (rvBusy) return '<tr><td colspan="4" class="empty">검수 중입니다…</td></tr>';
+  if (!rvRes || !rvRes.issues) return '<tr><td colspan="4" class="empty">위에 원고를 붙여 넣고 [검수하기]를 누르세요. 의료광고 위험 표현, 업체 지침 금지어, 키워드 과다, 반복 문장, 자사 블로그 기존 글과 겹침을 봅니다.</td></tr>';
+  if (!rvRes.issues.length) return '<tr><td colspan="4" class="empty">표현 규칙에 걸린 문장이 없습니다.</td></tr>';
+  return rvRes.issues.map(i => '<tr><td style="color:' + LV[i.level] + ';font-weight:700">' + i.level + '</td><td>' + esc(i.rule) + '<div class="extra">"' + esc(i.match) + '"</div></td><td>' + esc(i.sentence) + '</td><td class="extra">' + esc(i.tip) + '</td></tr>').join('');
+}
 function render() {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.k === view));
+  if (view === 'review') {
+    $('clipFilter').hidden = true;
+    $('thead').innerHTML = '<tr><th style="width:50px">수준</th><th style="width:150px">항목</th><th>문장</th><th style="width:220px">고칠 방향</th></tr>';
+    $('rows').innerHTML = reviewRows();
+    $('summary').innerHTML = reviewSummary();
+    $('rvBtn').onclick = runReview;
+    // 탭을 옮겨도 입력이 남도록
+    $('rvKw').oninput = e => { rv.keyword = e.target.value; }; $('rvTitle').oninput = e => { rv.title = e.target.value; }; $('rvText').oninput = e => { rv.text = e.target.value; };
+    return;
+  }
   if (view === 'guide') {
     $('clipFilter').hidden = true;
     $('thead').innerHTML = '<tr><th style="width:40px">순</th><th style="width:70px">구분</th><th>제목</th><th style="width:70px">글자</th><th style="width:50px">사진</th><th style="width:60px">소제목</th><th style="width:60px">키워드</th><th style="width:90px">발행일</th></tr>';

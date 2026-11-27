@@ -11,6 +11,7 @@ const checkers = require('./checkers.cjs');
 const store = require('./store.cjs');
 const { recommend, parseKw } = require('./recommend.cjs');
 const guide = require('./guide.cjs');
+const reviewer = require('./review.cjs');
 
 // 서버(호스팅) 모드: PORT 환경변수가 있으면 모든 주소(0.0.0.0)에서 받고, 자료는 DATA_DIR 에 둔다.
 const SERVER_MODE = !!process.env.PORT;
@@ -275,6 +276,15 @@ const server = http.createServer(async (req, res) => {
     const p = queue.then(() => guide.buildGuide(kw, targets));
     queue = p.catch(() => {});
     try { return json(await p); } catch (e) { return json({ keyword: kw, error: '분석 중 오류: ' + e.message }, 500); }
+  }
+  // 원고 검수: POST { vendor, keyword, title, text, guide? } — 의료광고·지침 금지어·키워드·반복·자사 블로그 유사도
+  if (u.pathname === '/api/review' && req.method === 'POST') {
+    const b = await body(req);
+    if (!String(b.text || '').trim()) return json({ error: '본문을 붙여 넣어 주세요.' }, 400);
+    const v = (loadSettings().vendors || []).find(x => x.name === (b.vendor || ''));
+    try {
+      return json(await reviewer.review({ vendor: b.vendor || '', ids: (v && v.ids) || b.ids || '', banned: (v && v.banned) || b.banned || '', keyword: parseKw(b.keyword || '').keyword, title: b.title || '', text: String(b.text).slice(0, 30000), guide: b.guide || null }));
+    } catch (e) { return json({ error: '검수 중 오류: ' + e.message }, 500); }
   }
   if (u.pathname === '/api/recommend') {
     const name = u.searchParams.get('vendor') || '';
