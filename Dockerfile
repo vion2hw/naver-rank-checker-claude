@@ -12,7 +12,7 @@ ENV NODE_ENV=production \
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY checkers.cjs server.cjs ./
+COPY checkers.cjs server.cjs store.cjs recommend.cjs ./
 COPY public ./public
 RUN mkdir -p /data
 

@@ -75,7 +75,7 @@
     <div class="kwbox"><h3><span class="dot" style="background:#03c75a"></span>플레이스 순위 <span class="n" id="n-place"></span></h3>
       <p>플레이스 목록 50위까지 순위 (광고 제외, 통검 순서와 같음)</p><textarea id="kw-place" placeholder="한 줄에 하나"></textarea></div>
     <div class="kwbox"><h3><span class="dot" style="background:#2f6fed"></span>통검 노출 <span class="n" id="n-search"></span></h3>
-      <p>1페이지 웹·블로그·카페 목록 안 순위 (자사 / 외부 블로그 구분)</p><textarea id="kw-search" placeholder="한 줄에 하나"></textarea></div>
+      <p>1페이지 웹·블로그·카페 목록 안 순위 (자사 / 외부 블로그 구분)<br>중요한 키워드는 위쪽에, 더 중요하면 앞에 <b>@</b> (예: @@청주치과) → 재발행 추천 순서</p><textarea id="kw-search" placeholder="한 줄에 하나"></textarea></div>
     <div class="kwbox"><h3><span class="dot" style="background:#c47f00"></span>통검 클립 존재 여부 <span class="n" id="n-clip"></span></h3>
       <p>통검에 클립 영역이 뜨는지만 빠르게 확인 (대량용, 키워드당 약 1~2초)</p><textarea id="kw-clip" placeholder="한 줄에 하나 · 엑셀 한 열 붙여넣기" style="min-height:140px"></textarea></div>
 
@@ -95,6 +95,7 @@
       <button class="tab on" data-k="place">플레이스<span class="c" id="c-place"></span></button>
       <button class="tab" data-k="search">통검 노출<span class="c" id="c-search"></span></button>
       <button class="tab" data-k="clip">통검 클립<span class="c" id="c-clip"></span></button>
+      <button class="tab" data-k="reco">재발행 추천<span class="c" id="c-reco"></span></button>
       <label class="filter" id="clipFilter" hidden><input type="checkbox" id="onlyYes"> 클립 있음만 보기</label>
     </div>
     <div class="summary" id="summary"></div>
@@ -148,7 +149,7 @@ $('run').onclick = async () => {
     opt: { delaySec: +$('delay').value || 3, clipDelaySec: +$('clipDelay').value || 1 } };
   const r = await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json(); if (j.error) return alert(j.error);
-  lastSig = ''; lastKind = ''; rows = { place: [], search: [], clip: [] }; setRunning(true); connect();
+  lastSig = ''; lastKind = ''; sig0 = ''; rows = { place: [], search: [], clip: [] }; setRunning(true); connect();
 };
 $('stop').onclick = () => { fetch('/api/stop', { method: 'POST' }); $('stop').disabled = true; };
 
@@ -192,8 +193,36 @@ function summaryHtml(k) {
   const ext = k === 'search' ? rs.filter(r => /외부/.test(r.label || '')).length : 0;
   return `<div>노출 <b style="color:var(--gd)">${yes}</b> / ${rs.length}</div>` + (k === 'search' ? `<div>그중 외부 글 <b style="color:var(--red)">${ext}</b></div>` : '') + (need ? `<div>확인필요 <b style="color:var(--amber)">${need}</b></div>` : '');
 }
+/* ---- 재발행 추천 ----
+   저장된 업체의 통검노출 기록을 보고 노출이 떨어진 키워드를 중요도(@ 개수 → 칸 순서) 순으로 보여 준다. */
+let reco = null;
+const STATE_COLOR = s => /이탈/.test(s) ? 'var(--red)' : /하락|빠짐/.test(s) ? 'var(--amber)' : 'var(--sub)';
+function recoHtml() {
+  if (!reco) return '<tr><td colspan="6" class="empty">업체를 저장한 뒤 통검 노출을 두 번 이상(다른 날) 돌리면 떨어진 키워드가 여기에 나옵니다. <button class="sub" id="recoBtn">지금 추천 보기</button></td></tr>';
+  if (reco.error) return '<tr><td colspan="6" class="empty">' + esc(reco.error) + '</td></tr>';
+  if (!reco.rows.length) return '<tr><td colspan="6" class="empty">재발행이 필요한 키워드가 없습니다 (' + reco.checked + '개 확인' + (reco.noData ? ', 기록 없는 키워드 ' + reco.noData + '개' : '') + ').</td></tr>';
+  return reco.rows.map(r => '<tr><td class="rank">' + r.no + '</td><td><b>' + esc(r.keyword) + '</b><div class="extra">' + esc(r.importance) + '</div></td>' +
+    '<td style="color:' + STATE_COLOR(r.state) + ';font-weight:700">' + esc(r.state) + '</td><td>' + esc(r.reason) + '<div class="extra">이전 ' + esc(r.prev) + ' → 지금 ' + esc(r.cur) + (r.best !== '-' ? ' · 최근 최고 ' + esc(r.best) : '') + '</div></td>' +
+    '<td>' + (r.lastLink ? '<a href="' + esc(r.lastLink) + '" target="_blank">' + esc(r.lastTitle || '예전 노출 글') + '</a><div class="extra">' + esc(r.lastBy) + '</div>' : '<span class="extra">노출 기록 없음</span>') + '</td></tr>').join('');
+}
+async function loadReco() {
+  const name = $('vname').value.trim();
+  const r = await fetch('/api/recommend?vendor=' + encodeURIComponent(name));
+  if (r.status === 401) return showLogin();
+  reco = await r.json();
+  if (view === 'reco') render(); else $('c-reco').textContent = reco.rows ? reco.rows.length : '';
+}
 function render() {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.k === view));
+  if (view === 'reco') {
+    $('clipFilter').hidden = true;
+    $('thead').innerHTML = '<tr><th style="width:50px">순</th><th style="width:140px">키워드 · 중요도</th><th style="width:110px">상태</th><th>이유</th><th style="width:260px">다시 쓸 글(예전 노출 글)</th></tr>';
+    $('rows').innerHTML = recoHtml();
+    $('summary').innerHTML = reco && reco.rows ? '<div>재발행 추천 <b style="color:var(--red)">' + reco.rows.length + '</b></div><div class="extra">' + (reco.storage === 'github' ? '기록 보관: GitHub' : '기록 보관: 서버 파일(재시작 시 지워질 수 있음)') + '</div>' : '';
+    $('c-reco').textContent = reco && reco.rows ? reco.rows.length : '';
+    const b = $('recoBtn'); if (b) b.onclick = loadReco;
+    return;
+  }
   for (const k of KINDS) $('c-' + k).textContent = rows[k].length ? rows[k].length : '';
   $('clipFilter').hidden = view !== 'clip';
   $('thead').innerHTML = HEAD[view];
@@ -202,7 +231,7 @@ function render() {
   $('rows').innerHTML = rs.length ? rs.map(rowHtml).join('') : `<tr><td colspan="5" class="empty">${running ? '확인 대기 중…' : '왼쪽에 키워드를 넣고 [전체 검사 시작]을 누르세요.'}</td></tr>`;
   $('summary').innerHTML = summaryHtml(view);
 }
-document.querySelectorAll('.tab').forEach(t => t.onclick = () => { view = t.dataset.k; render(); });
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => { view = t.dataset.k; render(); if (view === 'reco') loadReco(); });
 $('onlyYes').onchange = render;
 
 function setRunning(v) { running = v; $('run').disabled = v; $('stop').disabled = !v; $('run').textContent = v ? '검사 중…' : '전체 검사 시작'; }
@@ -214,7 +243,7 @@ function logLine(l) {
 const NAME = { place: '플레이스', search: '통검 노출', clip: '통검 클립' };
 /* ---- 로그인 후 상태 받아오기 ----
    무료 링크(터널)에서는 실시간 전송이 막히므로 1.5초마다 서버에 현재 상태를 물어 화면을 그린다. */
-let pollTimer = null, lastSig = '', lastKind = '';
+let pollTimer = null, lastSig = '', lastKind = '', sig0 = '';
 async function poll() {
   try {
     const r = await fetch('/api/state', { cache: 'no-store' });
@@ -222,7 +251,7 @@ async function poll() {
     const j = await r.json();
     if (!j) return stopPolling();
     // 검사가 끝났으면 묻기를 멈춘다(무료 링크 서비스의 월 요청 수를 아끼려고).
-    if (!j.running) stopPolling();
+    if (!j.running) { stopPolling(); if (j.rows && j.rows.search && j.rows.search.length && sig0 !== 'done') { sig0 = 'done'; loadReco(); } }
     const sig = j.done + '|' + j.log.length + '|' + j.running;
     if (sig === lastSig) return;
     lastSig = sig;

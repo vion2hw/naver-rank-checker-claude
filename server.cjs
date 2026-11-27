@@ -8,6 +8,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { exec } = require('child_process');
 const checkers = require('./checkers.cjs');
+const store = require('./store.cjs');
+const { recommend, parseKw } = require('./recommend.cjs');
 
 // 서버(호스팅) 모드: PORT 환경변수가 있으면 모든 주소(0.0.0.0)에서 받고, 자료는 DATA_DIR 에 둔다.
 const SERVER_MODE = !!process.env.PORT;
@@ -31,13 +33,13 @@ const DEFAULT_SETTINGS = {
 };
 const readJson = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
 const writeJson = (f, v) => fs.writeFileSync(f, JSON.stringify(v, null, 2), 'utf8');
+// 설정·기록은 store.cjs 가 보관한다(파일 또는 GitHub data 가지).
 function loadSettings() {
-  const s = readJson(SETTINGS, null) || JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+  const s = store.getSettings() || JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   // 예전 형식(keywords 하나)이면 세 칸에 똑같이 넣는다.
   for (const v of s.vendors || []) if (v.keywords && !v.place && !v.search && !v.clip) { v.place = v.search = v.clip = v.keywords; delete v.keywords; }
   return s;
 }
-if (!fs.existsSync(SETTINGS)) writeJson(SETTINGS, DEFAULT_SETTINGS);
 
 /* ---- 접속(세션)별 작업 / 실시간 전송 ----
    링크로 여러 사람이 접속해도 각자 자기 검사만 보이게 세션별로 나눈다.
@@ -55,17 +57,18 @@ const today = () => new Date().toLocaleDateString('sv-SE');
 const safe = s => String(s).replace(/[\\/:*?"<>|]/g, '').trim() || '업체';
 
 function prevRank(kind, vendor, keyword) {
-  const h = readJson(HISTORY, {});
+  const h = store.getHistory();
   const arr = (h[`${kind}|${vendor}|${keyword}`] || []).filter(x => x.date !== today());
   return arr.length ? arr[arr.length - 1] : null;
 }
-function saveRank(kind, vendor, keyword, rank, label) {
-  const h = readJson(HISTORY, {});
+// extra: 통검노출은 { by, link, title } 도 남겨 재발행 추천에 쓴다(예전에 노출되던 글 링크).
+function saveRank(kind, vendor, keyword, rank, label, extra = {}) {
+  const h = store.getHistory();
   const key = `${kind}|${vendor}|${keyword}`;
   const arr = (h[key] || []).filter(x => x.date !== today());
-  arr.push({ date: today(), rank, label });
-  h[key] = arr.slice(-60);
-  writeJson(HISTORY, h);
+  arr.push({ date: today(), rank, label, ...extra });
+  h[key] = arr.slice(-90);
+  store.touchHistory();
 }
 
 // 결과 객체 → 표 한 줄
@@ -153,7 +156,10 @@ async function runAll(S, vendor, ids, lists, opt) {
         else if (!prev.rank && row.rank) row.change = '신규';
         else if (prev.rank && !row.rank && row.status !== '확인필요') row.change = '이탈';
       }
-      if (row.status !== '확인필요') saveRank(p.kind, vendor, kw, row.rank, row.label);
+      if (row.status !== '확인필요') {
+        const f = (row.found || [])[0];
+        saveRank(p.kind, vendor, kw, row.rank, row.label, p.kind === 'search' && f ? { by: f.by, link: f.link, title: f.title, type: f.type } : {});
+      }
       job.rows[p.kind].push(row); job.done++;
       send('row', row);
       if (p.kind !== 'clip') log(`${KIND_NAME[p.kind]} · ${kw}: ${row.label}${row.change && row.change !== '-' ? ' ' + row.change : ''}`);
@@ -173,7 +179,7 @@ async function runAll(S, vendor, ids, lists, opt) {
 function webPassword() {
   if (process.env.WEB_PASSWORD) return String(process.env.WEB_PASSWORD);
   const st = loadSettings();
-  if (!st.webPassword) { st.webPassword = String(crypto.randomInt(100000, 1000000)); writeJson(SETTINGS, st); }
+  if (!st.webPassword) { st.webPassword = String(crypto.randomInt(100000, 1000000)); store.setSettings(st); }
   return String(st.webPassword);
 }
 const tokens = new Set();
@@ -204,12 +210,20 @@ async function buildXlsx(job) {
   }
   if (R.clip.length) sheet('통검클립', ['확인일시', '키워드', '통검 클립', '이전', '변동', '내 클립 포함', '비고', '검색주소'],
     R.clip.map(r => [now, r.keyword, r.label, r.prev || '', r.change || '', /내 클립/.test(r.detail) ? 'O' : '', r.status === '확인필요' ? r.note : '', r.url]), [20, 18, 10, 16, 8, 12, 30, 40]);
+  // 재발행 추천(저장된 업체일 때만)
+  const v = (loadSettings().vendors || []).find(x => x.name === job.vendor);
+  if (v && R.search.length) {
+    const rec = recommend(v, store.getHistory(), today());
+    sheet('재발행추천', ['추천순', '키워드', '중요도', '상태', '이유', '이전', '지금', '최근 최고', '예전 노출 글', '글 제목', '구분'],
+      rec.rows.map(r => [r.no, r.keyword, r.importance, r.state, r.reason, r.prev, r.cur, r.best, r.lastLink, r.lastTitle, r.lastBy]), [7, 16, 12, 16, 36, 22, 22, 14, 45, 40, 12]);
+  }
   return wb.xlsx.writeBuffer();
 }
 
 /* ---- HTTP ---- */
 function body(req) { return new Promise(r => { let b = ''; req.on('data', c => { b += c; if (b.length > 2e6) req.destroy(); }); req.on('end', () => { try { r(JSON.parse(b || '{}')); } catch { r({}); } }); }); }
-const splitKw = t => [...new Set(String(t || '').split(/\r?\n|\t/).map(s => s.trim()).filter(Boolean))];
+// 키워드 앞의 '@'(중요도 표시)는 떼고 검색한다.
+const splitKw = t => [...new Set(String(t || '').split(/\r?\n|\t/).map(x => parseKw(x).keyword).filter(Boolean))];
 const MAX_KEYWORDS = 500;
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://localhost');
@@ -249,7 +263,14 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify(S.job || null));
   }
   if (u.pathname === '/api/settings' && req.method === 'GET') { const st = loadSettings(); delete st.webPassword; return json(st); }
-  if (u.pathname === '/api/settings' && req.method === 'POST') { const b = await body(req); b.webPassword = webPassword(); writeJson(SETTINGS, b); return json({ ok: true }); }
+  if (u.pathname === '/api/settings' && req.method === 'POST') { const b = await body(req); b.webPassword = webPassword(); store.setSettings(b); return json({ ok: true }); }
+  // 재발행 추천: ?vendor=업체명 (저장된 업체의 통검노출 키워드 칸 순서·@ 개수로 중요도)
+  if (u.pathname === '/api/recommend') {
+    const name = u.searchParams.get('vendor') || '';
+    const v = (loadSettings().vendors || []).find(x => x.name === name);
+    if (!v) return json({ error: '저장된 업체가 아닙니다. 업체·키워드 저장 후 다시 보세요.' }, 404);
+    return json({ vendor: name, storage: store.mode(), ...recommend(v, store.getHistory(), today()) });
+  }
   if (u.pathname === '/api/run' && req.method === 'POST') {
     if (S.job && S.job.running) return json({ error: '이미 검사 중입니다.' }, 409);
     const b = await body(req);
@@ -282,9 +303,9 @@ server.on('error', e => {
   if (e.code === 'EADDRINUSE') { console.log('이미 실행 중입니다. 브라우저에서 엽니다.'); if (process.platform === 'win32') exec(`start "" http://localhost:${PORT}`); setTimeout(() => process.exit(0), 500); }
   else throw e;
 });
-server.listen(PORT, HOST, () => {
+store.init(DEFAULT_SETTINGS).then(() => server.listen(PORT, HOST, () => {
   console.log(`네이버 순위체커 실행 중: http://localhost:${PORT}  (이 창을 닫으면 종료됩니다)`);
   if (process.env.WEB_PASSWORD) console.log('접속 비밀번호: 환경변수 WEB_PASSWORD 사용');
   else console.log(`접속 비밀번호: ${webPassword()}  (설정.json 의 webPassword 에서 바꿀 수 있음)`);
   if (!SERVER_MODE && process.platform === 'win32' && !process.argv.includes('--no-open')) exec(`start "" http://localhost:${PORT}`);
-});
+}));
