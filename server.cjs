@@ -131,7 +131,7 @@ async function runAll(S, vendor, ids, lists, opt) {
   const job = S.job;
   Object.assign(job, { vendor, running: true, total, done: 0, plan: plan.map(p => ({ kind: p.kind, n: p.keywords.length })) });
   send('start', { vendor, total, plan: job.plan });
-  log(`전체 검사 시작 · ${vendor} · ` + plan.map(p => `${KIND_NAME[p.kind]} ${p.keywords.length}개`).join(', ') + ` · 식별어: ${targets.join(', ')}`);
+  log(`통검 순위 확인 시작 · ${vendor} · ` + plan.map(p => `${KIND_NAME[p.kind]} ${p.keywords.length}개`).join(', ') + ` · 식별어: ${targets.join(', ')}`);
   const dir = path.join(RESULT_DIR, `${safe(vendor)}_${stamp()}`);
   // 원격 접속자는 보안 확인 창을 볼 수 없으므로 창 띄우기는 끄고 '확인필요'로 넘긴다.
   const common = { ...opt, interactive: false, onLog: log, shouldStop: () => job.stop };
@@ -274,11 +274,12 @@ const server = http.createServer(async (req, res) => {
   if (u.pathname === '/api/run' && req.method === 'POST') {
     if (S.job && S.job.running) return json({ error: '이미 검사 중입니다.' }, 409);
     const b = await body(req);
-    const lists = { place: splitKw(b.place), search: splitKw(b.search), clip: splitKw(b.clip) };
-    const n = lists.place.length + lists.search.length + lists.clip.length;
-    if (!n) return json({ error: '키워드를 한 칸 이상 입력해 주세요.' }, 400);
+    // 통검 순위 · 재발행 추천 전용: 통검노출 키워드만 처리한다(플레이스·클립은 2026-11-27 사용자 요청으로 뺌).
+    const lists = { place: [], search: splitKw(b.search), clip: [] };
+    const n = lists.search.length;
+    if (!n) return json({ error: '통검 노출 키워드를 입력해 주세요.' }, 400);
     if (n > MAX_KEYWORDS) return json({ error: `한 번에 ${MAX_KEYWORDS}개까지 넣을 수 있습니다(지금 ${n}개).` }, 400);
-    if ((lists.place.length || lists.search.length) && !String(b.ids || '').trim()) return json({ error: '플레이스·통검노출은 업체 식별어가 필요합니다.' }, 400);
+    if (!String(b.ids || '').trim()) return json({ error: '업체 식별어가 필요합니다.' }, 400);
     const mine = S.job = { vendor: b.vendor || '업체', running: true, stop: false, rows: { place: [], search: [], clip: [] }, log: [], total: n, done: 0 };
     if (waiting) { sendTo(S, 'start', { vendor: mine.vendor, total: n }); logTo(S, `다른 사람 검사가 끝나면 시작합니다(앞에 ${waiting}건).`); }
     waiting++;

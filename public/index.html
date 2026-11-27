@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>네이버 순위체커</title>
+<title>통검 순위 · 재발행 추천</title>
 <style>
   :root { --g:#03c75a; --gd:#02a84b; --bg:#f4f6f8; --line:#e3e7eb; --tx:#1d2329; --sub:#6b7680; --red:#e5484d; --blue:#2f6fed; --amber:#c47f00; }
   * { box-sizing:border-box; }
@@ -53,10 +53,10 @@
 </style>
 </head>
 <body>
-<header><h1><b>N</b> 순위체커</h1><span class="sub">업체와 키워드를 넣고 한 번에 플레이스 · 통검노출 · 통검클립을 확인합니다</span></header>
+<header><h1><b>N</b> 통검 순위 · 재발행 추천</h1><span class="sub">통검 노출 순위를 기록하고, 떨어진 키워드를 중요한 순서대로 재발행 추천합니다</span></header>
 <div id="login" style="display:none;position:fixed;inset:0;background:rgba(29,35,41,.55);z-index:9;align-items:center;justify-content:center;padding:20px">
   <form id="pwForm" class="card" style="width:100%;max-width:340px">
-    <h2 style="margin:0 0 6px;font-size:18px"><b style="color:var(--g)">N</b> 순위체커</h2>
+    <h2 style="margin:0 0 6px;font-size:18px"><b style="color:var(--g)">N</b> 통검 순위 · 재발행 추천</h2>
     <p style="margin:0 0 12px;color:var(--sub);font-size:13px">접속 비밀번호를 입력하세요.</p>
     <input id="pw" type="password" inputmode="numeric" autocomplete="current-password" placeholder="비밀번호">
     <div id="pwMsg" style="color:var(--red);font-size:13px;min-height:18px;margin:6px 0"></div>
@@ -69,21 +69,14 @@
     <div class="row2"><select id="vendor"></select><button class="sub" id="addVendor" style="flex:0 0 auto">+ 새 업체</button></div>
     <label>업체명</label>
     <input id="vname" placeholder="예: 하얀미소치과의원">
-    <label>업체 식별어 <span>(쉼표 구분 · 업체명 일부, 플레이스 번호, 블로그·클립 아이디)</span></label>
+    <label>업체 식별어 <span>(쉼표 구분 · 업체명 일부, 블로그 아이디, 홈페이지 주소 일부)</span></label>
     <input id="ids" placeholder="예: 하얀미소, whitesmile001, 13248170">
 
-    <div class="kwbox"><h3><span class="dot" style="background:#03c75a"></span>플레이스 순위 <span class="n" id="n-place"></span></h3>
-      <p>플레이스 목록 50위까지 순위 (광고 제외, 통검 순서와 같음)</p><textarea id="kw-place" placeholder="한 줄에 하나"></textarea></div>
-    <div class="kwbox"><h3><span class="dot" style="background:#2f6fed"></span>통검 노출 <span class="n" id="n-search"></span></h3>
-      <p>1페이지 웹·블로그·카페 목록 안 순위 (자사 / 외부 블로그 구분)<br>중요한 키워드는 위쪽에, 더 중요하면 앞에 <b>@</b> (예: @@청주치과) → 재발행 추천 순서</p><textarea id="kw-search" placeholder="한 줄에 하나"></textarea></div>
-    <div class="kwbox"><h3><span class="dot" style="background:#c47f00"></span>통검 클립 존재 여부 <span class="n" id="n-clip"></span></h3>
-      <p>통검에 클립 영역이 뜨는지만 빠르게 확인 (대량용, 키워드당 약 1~2초)</p><textarea id="kw-clip" placeholder="한 줄에 하나 · 엑셀 한 열 붙여넣기" style="min-height:140px"></textarea></div>
+    <div class="kwbox"><h3><span class="dot" style="background:#2f6fed"></span>통검 노출 키워드 <span class="n" id="n-search"></span></h3>
+      <p>1페이지 웹·블로그·카페 목록 안 순위 (자사 / 외부 블로그 구분)<br>중요한 키워드는 위쪽에, 더 중요하면 앞에 <b>@</b> (예: @@청주치과) → 재발행 추천 순서</p><textarea id="kw-search" placeholder="한 줄에 하나 · 중요한 것부터&#10;@@청주치과&#10;@청주임플란트&#10;청주스케일링" style="min-height:200px"></textarea></div>
 
-    <div class="row2">
-      <div><label>순위 간격 <span>(초)</span></label><input id="delay" type="number" min="1" max="30" value="3"></div>
-      <div><label>클립 간격 <span>(초)</span></label><input id="clipDelay" type="number" min="0.5" max="10" step="0.5" value="1"></div>
-    </div>
-    <div class="btns"><button class="main" id="run">전체 검사 시작</button><button class="sub" id="stop" disabled>중지</button></div>
+    <label>키워드 간 간격 <span>(초)</span></label><input id="delay" type="number" min="1" max="30" value="3">
+    <div class="btns"><button class="main" id="run">통검 순위 확인</button><button class="sub" id="stop" disabled>중지</button></div>
     <div class="btns"><button class="sub" id="save" style="flex:1">업체·키워드 저장</button><button class="sub" id="openDir" style="flex:1">엑셀 다운로드</button></div>
   </section>
 
@@ -92,11 +85,9 @@
     <div class="top"><b id="state">대기 중</b><span class="grow"></span><span id="count" style="color:var(--sub)"></span></div>
     <div class="bar"><i id="bar"></i></div>
     <div class="tabs">
-      <button class="tab on" data-k="place">플레이스<span class="c" id="c-place"></span></button>
-      <button class="tab" data-k="search">통검 노출<span class="c" id="c-search"></span></button>
-      <button class="tab" data-k="clip">통검 클립<span class="c" id="c-clip"></span></button>
       <button class="tab" data-k="reco">재발행 추천<span class="c" id="c-reco"></span></button>
-      <label class="filter" id="clipFilter" hidden><input type="checkbox" id="onlyYes"> 클립 있음만 보기</label>
+      <button class="tab on" data-k="search">통검 순위<span class="c" id="c-search"></span></button>
+      <span id="clipFilter" hidden><input type="checkbox" id="onlyYes" hidden></span>
     </div>
     <div class="summary" id="summary"></div>
     <div style="max-height:calc(100vh - 360px); overflow:auto">
@@ -109,8 +100,8 @@
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const KINDS = ['place','search','clip'];
-let settings = { vendors: [] }, running = false, view = 'place', total = 0, done = 0;
+const KINDS = ['search'];
+let settings = { vendors: [] }, running = false, view = 'search', total = 0, done = 0;
 let rows = { place: [], search: [], clip: [] };
 
 /* ---- 업체 설정 ---- */
@@ -126,7 +117,7 @@ async function loadSettings() {
   settings = await (await fetch('/api/settings')).json();
   if (!settings.vendors.length) settings.vendors.push({ name: '새 업체', ids: '' });
   $('vendor').innerHTML = settings.vendors.map((v, i) => `<option value="${i}">${esc(v.name)}</option>`).join('');
-  fillVendor(0); $('delay').value = settings.delaySec || 3; $('clipDelay').value = settings.clipDelaySec || 1;
+  fillVendor(0); $('delay').value = settings.delaySec || 3;
 }
 $('vendor').onchange = () => fillVendor(+$('vendor').value);
 $('addVendor').onclick = () => {
@@ -136,8 +127,8 @@ $('addVendor').onclick = () => {
 };
 $('save').onclick = async () => {
   const i = +$('vendor').value;
-  settings.vendors[i] = { name: $('vname').value.trim() || '업체', ids: $('ids').value, place: $('kw-place').value, search: $('kw-search').value, clip: $('kw-clip').value };
-  settings.delaySec = +$('delay').value || 3; settings.clipDelaySec = +$('clipDelay').value || 1;
+  settings.vendors[i] = { ...(settings.vendors[i] || {}), name: $('vname').value.trim() || '업체', ids: $('ids').value, search: $('kw-search').value };
+  settings.delaySec = +$('delay').value || 3;
   await fetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(settings) });
   $('vendor').options[i].textContent = settings.vendors[i].name;
   $('save').textContent = '저장됨'; setTimeout(() => $('save').textContent = '업체·키워드 저장', 1200);
@@ -145,8 +136,8 @@ $('save').onclick = async () => {
 $('openDir').onclick = () => { if (!done) return alert('먼저 검사를 돌려 주세요.'); location.href = '/api/export'; };
 $('run').onclick = async () => {
   const body = { vendor: $('vname').value.trim() || '업체', ids: $('ids').value,
-    place: $('kw-place').value, search: $('kw-search').value, clip: $('kw-clip').value,
-    opt: { delaySec: +$('delay').value || 3, clipDelaySec: +$('clipDelay').value || 1 } };
+    search: $('kw-search').value,
+    opt: { delaySec: +$('delay').value || 3 } };
   const r = await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json(); if (j.error) return alert(j.error);
   lastSig = ''; lastKind = ''; sig0 = ''; rows = { place: [], search: [], clip: [] }; setRunning(true); connect();
@@ -251,7 +242,7 @@ async function poll() {
     const j = await r.json();
     if (!j) return stopPolling();
     // 검사가 끝났으면 묻기를 멈춘다(무료 링크 서비스의 월 요청 수를 아끼려고).
-    if (!j.running) { stopPolling(); if (j.rows && j.rows.search && j.rows.search.length && sig0 !== 'done') { sig0 = 'done'; loadReco(); } }
+    if (!j.running) { stopPolling(); if (j.rows && j.rows.search && j.rows.search.length && sig0 !== 'done') { sig0 = 'done'; view = 'reco'; loadReco(); } }
     const sig = j.done + '|' + j.log.length + '|' + j.running;
     if (sig === lastSig) return;
     lastSig = sig;
@@ -282,7 +273,7 @@ async function start() {
   settings = await r.json();
   if (!settings.vendors.length) settings.vendors.push({ name: '새 업체', ids: '' });
   $('vendor').innerHTML = settings.vendors.map((v, i) => `<option value="${i}">${esc(v.name)}</option>`).join('');
-  fillVendor(0); $('delay').value = settings.delaySec || 3; $('clipDelay').value = settings.clipDelaySec || 1;
+  fillVendor(0); $('delay').value = settings.delaySec || 3;
   connect();
 }
 render(); start();
