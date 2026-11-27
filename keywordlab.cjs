@@ -149,4 +149,12 @@ function pickCandidates(list, vendor, already) {
   return out;
 }
 
-module.exports = { analyzeKeyword, pickCandidates, vendorWords, isForeignBrand, adEnabled: () => !!AD };
+// 검색광고 키 점검: 고정 키워드 하나로 호출해 성공 여부와 HTTP 상태만 돌려준다
+async function adCheck() {
+  const r = await adKeywords('임플란트');
+  if (!r) return { ok: false, status: 'no-key' };
+  if (r.error) return { ok: false, status: r.error };
+  return { ok: true, status: 'ok', sample: !!(r.related && r.related.length) };
+}
+
+module.exports = { analyzeKeyword, pickCandidates, vendorWords, isForeignBrand, adEnabled: () => !!AD, adCheck };

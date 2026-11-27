@@ -236,6 +236,12 @@ const server = http.createServer(async (req, res) => {
     return res.end(fs.readFileSync(path.join(ROOT, 'public', 'index.html')));
   }
   if (u.pathname === '/healthz') { res.writeHead(200); return res.end('ok'); }
+  // 설정 점검(로그인 불필요): 기록 보관 방식과 검색광고 키가 동작하는지만 알려 준다. 키 값·검색 데이터는 내보내지 않는다.
+  if (u.pathname === '/healthz/config') {
+    let ad = { enabled: keywordlab.adEnabled() };
+    if (ad.enabled) { try { ad = { ...ad, ...(await keywordlab.adCheck()) }; } catch (e) { ad.ok = false; ad.status = 'error'; } }
+    return json({ storage: store.mode(), ad });
+  }
   if (u.pathname === '/api/login' && req.method === 'POST') {
     const ip = ipOf(req); const f = fails.get(ip) || { n: 0, until: 0 };
     if (f.until > Date.now()) return json({ error: '비밀번호를 여러 번 틀려 10분간 잠겼습니다.' }, 429);
