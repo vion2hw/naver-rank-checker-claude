@@ -10,6 +10,7 @@ const { exec } = require('child_process');
 const checkers = require('./checkers.cjs');
 const store = require('./store.cjs');
 const { recommend, parseKw } = require('./recommend.cjs');
+const guide = require('./guide.cjs');
 
 // 서버(호스팅) 모드: PORT 환경변수가 있으면 모든 주소(0.0.0.0)에서 받고, 자료는 DATA_DIR 에 둔다.
 const SERVER_MODE = !!process.env.PORT;
@@ -265,6 +266,16 @@ const server = http.createServer(async (req, res) => {
   if (u.pathname === '/api/settings' && req.method === 'GET') { const st = loadSettings(); delete st.webPassword; return json(st); }
   if (u.pathname === '/api/settings' && req.method === 'POST') { const b = await body(req); b.webPassword = webPassword(); store.setSettings(b); return json({ ok: true }); }
   // 재발행 추천: ?vendor=업체명 (저장된 업체의 통검노출 키워드 칸 순서·@ 개수로 중요도)
+  // 작성 가이드: ?keyword=키워드&vendor=업체명 — 통검 상위 글 구조·수치 분석(대기열을 같이 써서 검사와 겹치지 않게)
+  if (u.pathname === '/api/guide') {
+    const kw = parseKw(u.searchParams.get('keyword') || '').keyword;
+    if (!kw) return json({ error: '키워드를 입력해 주세요.' }, 400);
+    const v = (loadSettings().vendors || []).find(x => x.name === (u.searchParams.get('vendor') || ''));
+    const targets = String((v && v.ids) || '').split(/[,\n]/).map(x => x.trim()).filter(Boolean);
+    const p = queue.then(() => guide.buildGuide(kw, targets));
+    queue = p.catch(() => {});
+    try { return json(await p); } catch (e) { return json({ keyword: kw, error: '분석 중 오류: ' + e.message }, 500); }
+  }
   if (u.pathname === '/api/recommend') {
     const name = u.searchParams.get('vendor') || '';
     const v = (loadSettings().vendors || []).find(x => x.name === name);

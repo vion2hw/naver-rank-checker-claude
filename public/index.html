@@ -87,6 +87,7 @@
     <div class="tabs">
       <button class="tab" data-k="reco">재발행 추천<span class="c" id="c-reco"></span></button>
       <button class="tab on" data-k="search">통검 순위<span class="c" id="c-search"></span></button>
+      <button class="tab" data-k="guide">작성 가이드</button>
       <span id="clipFilter" hidden><input type="checkbox" id="onlyYes" hidden></span>
     </div>
     <div class="summary" id="summary"></div>
@@ -194,7 +195,7 @@ function recoHtml() {
   if (!reco.rows.length) return '<tr><td colspan="6" class="empty">재발행이 필요한 키워드가 없습니다 (' + reco.checked + '개 확인' + (reco.noData ? ', 기록 없는 키워드 ' + reco.noData + '개' : '') + ').</td></tr>';
   return reco.rows.map(r => '<tr><td class="rank">' + r.no + '</td><td><b>' + esc(r.keyword) + '</b><div class="extra">' + esc(r.importance) + '</div></td>' +
     '<td style="color:' + STATE_COLOR(r.state) + ';font-weight:700">' + esc(r.state) + '</td><td>' + esc(r.reason) + '<div class="extra">이전 ' + esc(r.prev) + ' → 지금 ' + esc(r.cur) + (r.best !== '-' ? ' · 최근 최고 ' + esc(r.best) : '') + '</div></td>' +
-    '<td>' + (r.lastLink ? '<a href="' + esc(r.lastLink) + '" target="_blank">' + esc(r.lastTitle || '예전 노출 글') + '</a><div class="extra">' + esc(r.lastBy) + '</div>' : '<span class="extra">노출 기록 없음</span>') + '</td></tr>').join('');
+    '<td>' + (r.lastLink ? '<a href="' + esc(r.lastLink) + '" target="_blank">' + esc(r.lastTitle || '예전 노출 글') + '</a><div class="extra">' + esc(r.lastBy) + '</div>' : '<span class="extra">노출 기록 없음</span>') + '<div><button class="sub gbtn" data-kw="' + esc(r.keyword) + '" style="padding:3px 8px;margin-top:4px;font-size:12px">작성 가이드</button></div></td></tr>').join('');
 }
 async function loadReco() {
   const name = $('vname').value.trim();
@@ -203,8 +204,47 @@ async function loadReco() {
   reco = await r.json();
   if (view === 'reco') render(); else $('c-reco').textContent = reco.rows ? reco.rows.length : '';
 }
+/* ---- 작성 가이드 ----
+   키워드의 통검 상위 글 구조·수치(글자 수, 사진, 소제목, 키워드 횟수, 발행일)를 보고 권장 기준을 보여 준다. */
+let guideData = null, guideBusy = false;
+async function runGuide(kw) {
+  kw = String(kw || '').replace(/^@+/, '').trim();
+  if (!kw) return alert('키워드를 입력해 주세요.');
+  guideBusy = true; guideData = { keyword: kw }; view = 'guide'; render();
+  try {
+    const r = await fetch('/api/guide?keyword=' + encodeURIComponent(kw) + '&vendor=' + encodeURIComponent($('vname').value.trim()));
+    if (r.status === 401) return showLogin();
+    guideData = await r.json();
+  } catch (e) { guideData = { keyword: kw, error: '분석하지 못했습니다(시간 초과 등).' }; }
+  guideBusy = false; if (view === 'guide') render();
+}
+function guideBar() {
+  return '<div style="display:flex;gap:6px;width:100%;margin-bottom:6px"><input id="gkw" placeholder="키워드 (예: 청주치아교정)" value="' + esc(guideData ? guideData.keyword : '') + '" style="flex:1"><button class="main" id="gbtn" style="flex:0 0 auto;padding:8px 16px"' + (guideBusy ? ' disabled' : '') + '>' + (guideBusy ? '분석 중… (10~30초)' : '상위 글 분석') + '</button></div>';
+}
+function guideSummary() {
+  const g = guideData;
+  if (!g || guideBusy || g.error || !g.tips) return guideBar() + (g && g.error ? '<div style="color:var(--red)">' + esc(g.error) + '</div>' : '<div class="extra">통검 상위 10개 글(웹·블로그·카페 목록)을 읽어 글자 수·사진·소제목·키워드 횟수·발행일을 정리합니다. 본문은 가져오지 않고 수치만 봅니다.</div>');
+  const st = g.stats;
+  return guideBar() + '<div style="width:100%"><b>' + esc(g.keyword) + '</b> 작성 기준 <span class="extra">(' + esc(g.checkedAt) + ' · 상위 ' + st.total + '개 중 블로그 ' + st.analyzed + '개 본문 분석' + (g.own && g.own.length ? ' · 자사 글 ' + g.own.join(', ') + '위' : ' · 자사 글 없음') + ')</span>' +
+    '<ul style="margin:6px 0 0;padding-left:18px;line-height:1.7">' + g.tips.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul></div>';
+}
+function guideRows() {
+  const g = guideData;
+  if (!g || !g.posts) return '<tr><td colspan="8" class="empty">' + (guideBusy ? '상위 글을 읽는 중입니다…' : '키워드를 넣고 [상위 글 분석]을 누르거나, 재발행 추천의 [작성 가이드] 버튼을 누르세요.') + '</td></tr>';
+  return g.posts.map(p => '<tr><td class="rank">' + p.rank + '</td><td>' + esc(p.type) + '</td><td><a href="' + esc(p.link) + '" target="_blank">' + esc(p.title || '(제목 없음)') + '</a>' + (p.source ? '<div class="extra">' + esc(p.source) + '</div>' : '') + '</td>' +
+    (p.analyzed ? '<td>' + p.chars.toLocaleString() + '</td><td>' + p.images + '</td><td>' + p.headings + '</td><td>' + p.kwCount + '</td><td>' + esc(p.date) + '</td>' : '<td colspan="5" class="extra">' + esc(p.note || '') + '</td>') + '</tr>').join('');
+}
 function render() {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.k === view));
+  if (view === 'guide') {
+    $('clipFilter').hidden = true;
+    $('thead').innerHTML = '<tr><th style="width:40px">순</th><th style="width:70px">구분</th><th>제목</th><th style="width:70px">글자</th><th style="width:50px">사진</th><th style="width:60px">소제목</th><th style="width:60px">키워드</th><th style="width:90px">발행일</th></tr>';
+    $('rows').innerHTML = guideRows();
+    $('summary').innerHTML = guideSummary();
+    $('gbtn').onclick = () => runGuide($('gkw').value);
+    $('gkw').onkeydown = e => { if (e.key === 'Enter') runGuide($('gkw').value); };
+    return;
+  }
   if (view === 'reco') {
     $('clipFilter').hidden = true;
     $('thead').innerHTML = '<tr><th style="width:50px">순</th><th style="width:140px">키워드 · 중요도</th><th style="width:110px">상태</th><th>이유</th><th style="width:260px">다시 쓸 글(예전 노출 글)</th></tr>';
@@ -212,6 +252,7 @@ function render() {
     $('summary').innerHTML = reco && reco.rows ? '<div>재발행 추천 <b style="color:var(--red)">' + reco.rows.length + '</b></div><div class="extra">' + (reco.storage === 'github' ? '기록 보관: GitHub' : '기록 보관: 서버 파일(재시작 시 지워질 수 있음)') + '</div>' : '';
     $('c-reco').textContent = reco && reco.rows ? reco.rows.length : '';
     const b = $('recoBtn'); if (b) b.onclick = loadReco;
+    document.querySelectorAll('.gbtn').forEach(x => x.onclick = () => runGuide(x.dataset.kw));
     return;
   }
   for (const k of KINDS) $('c-' + k).textContent = rows[k].length ? rows[k].length : '';

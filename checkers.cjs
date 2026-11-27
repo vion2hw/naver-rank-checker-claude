@@ -244,7 +244,7 @@ const EXCLUDED_BLOCK = /^(플레이스|클립|광고|관련검색어|AI ?브리�
 async function checkSearch(keyword, targets, opt = {}) {
   const pages = 1; // 통검은 1페이지를 끝까지 스크롤한 범위만 본다.
   let page = await newPage();
-  const results = { status: '미노출', found: [], smart: [], blocks: [], listTotal: 0, url: 'https://m.search.naver.com/search.naver?query=' + encodeURIComponent(keyword) };
+  const results = { status: '미노출', found: [], smart: [], blocks: [], list: [], listTotal: 0, url: 'https://m.search.naver.com/search.naver?query=' + encodeURIComponent(keyword) };
   try {
     let listRank = 0; let blockNo = 0;
     for (let p = 1; p <= pages; p++) {
@@ -260,6 +260,8 @@ async function checkSearch(keyword, targets, opt = {}) {
         const isList = b.name.startsWith('통합 결과');
         const excluded = EXCLUDED_BLOCK.test(b.name);
         const items = b.items.map((it, i) => ({ ...it, pos: i + 1, rank: isList ? ++listRank : null }));
+        // 작성 가이드용: 통합 결과 목록 전체(순위·구분·제목·링크·출처)
+        if (isList) for (const it of items) results.list.push({ rank: it.rank, type: it.type, title: it.title, link: it.href, source: it.source || '' });
         const mark = it => ({ ...it, by: matchAny((it.owner || '') + ' ' + it.href + (it.type === '플레이스' || it.type === '클립' ? ' ' + it.text : ''), targets) ? '자사 채널' : '외부 ' + it.type });
         const hits = excluded ? [] : items.filter(it => matchAny(it.text + ' ' + it.href + ' ' + (it.owner || ''), targets)).map(mark);
         results.blocks.push({ page: p, no: shown ? blockNo : null, name: b.name, count: items.length, hit: hits.length, counted: isList,
