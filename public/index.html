@@ -53,6 +53,7 @@
 </style>
 </head>
 <body>
+<div id="testBadge" style="display:none;position:fixed;top:10px;right:12px;z-index:20;background:#e5484d;color:#fff;font-weight:700;padding:4px 12px;border-radius:6px;font-size:13px">시험용</div>
 <header><h1><b>N</b> 통검 순위 · 재발행 추천</h1><span class="sub">통검 노출 순위를 기록하고, 떨어진 키워드를 중요한 순서대로 재발행 추천합니다</span></header>
 <div id="login" style="display:none;position:fixed;inset:0;background:rgba(29,35,41,.55);z-index:9;align-items:center;justify-content:center;padding:20px">
   <form id="pwForm" class="card" style="width:100%;max-width:340px">
@@ -434,6 +435,8 @@ async function start() {
   fillVendor(0); $('delay').value = settings.delaySec || 3;
   connect();
 }
+// 주소에 test·staging 이 들어간 시험용 서비스에서는 빨간 '시험용' 딱지를 띄운다
+if (/test|staging/i.test(location.hostname)) { $('testBadge').style.display = 'block'; document.title = '[시험용] ' + document.title; }
 render(); start();
 </script>
 </body>
