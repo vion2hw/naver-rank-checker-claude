@@ -93,7 +93,7 @@ async function analyzeKeyword(keyword, vendor, history) {
   // 노출 난이도(높을수록 어려움)
   let diff = 40 + cnt('웹사이트') * 8;
   if (medAge != null) diff += medAge > 90 ? 20 : medAge > 30 ? 10 : medAge <= 7 ? -15 : medAge <= 14 ? -8 : 0;
-  if (vol != null) diff += vol > 5000 ? 15 : vol > 1000 ? 8 : vol < 200 ? -10 : 0;
+  if (vol != null) diff += vol > 10000 ? 30 : vol > 5000 ? 18 : vol > 1000 ? 8 : vol < 200 ? -10 : 0; // 검색량이 아주 큰 키워드는 경쟁이 세서 건바이 쪽으로
   if (ad && ad.self && ad.self.comp === '높음') diff += 5;
   diff = clamp(diff);
   // 외부카페 적합도
@@ -105,6 +105,7 @@ async function analyzeKeyword(keyword, vendor, history) {
   if (banned.some(b => norm(keyword).includes(norm(b)))) { fit = 0; reasons.push('업체 금지어 포함'); }
   if (isForeignBrand(keyword, words)) { fit = 0; reasons.push('다른 업체 이름 포함'); }
   if (PRICE_COMP.test(keyword)) { fit -= 30; reasons.push('가격 경쟁·할인 의도라 조심'); }
+  if (/잘하는/.test(keyword)) { fit -= 10; reasons.push('"잘하는 곳"은 의료 원고에 못 쓰는 표현 → 카페 질문형으로만'); }
   fit = clamp(fit);
   // 필요도
   let need = ownBest == null ? 60 : ownBest <= 3 ? 10 : ownBest <= 10 ? 30 : 45;
