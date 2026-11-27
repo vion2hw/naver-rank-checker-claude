@@ -87,6 +87,7 @@
     <div class="top"><b id="state">대기 중</b><span class="grow"></span><span id="count" style="color:var(--sub)"></span></div>
     <div class="bar"><i id="bar"></i></div>
     <div class="tabs">
+      <button class="tab" data-k="today">오늘의 추천</button>
       <button class="tab" data-k="reco">재발행 추천<span class="c" id="c-reco"></span></button>
       <button class="tab on" data-k="search">통검 순위<span class="c" id="c-search"></span></button>
       <button class="tab" data-k="guide">작성 가이드</button>
@@ -277,8 +278,71 @@ function reviewRows() {
   if (!rvRes.issues.length) return '<tr><td colspan="4" class="empty">표현 규칙에 걸린 문장이 없습니다.</td></tr>';
   return rvRes.issues.map(i => '<tr><td style="color:' + LV[i.level] + ';font-weight:700">' + i.level + '</td><td>' + esc(i.rule) + '<div class="extra">"' + esc(i.match) + '"</div></td><td>' + esc(i.sentence) + '</td><td class="extra">' + esc(i.tip) + '</td></tr>').join('');
 }
+/* ---- 오늘의 추천 ----
+   업체 키워드 → 관련 키워드 후보까지 하나씩 분석해 필요도·업체 적합·검색량으로 순위를 매기고, 난이도·카페 적합으로 채널을 정한다. */
+let td = { rows: [], busy: false, msg: '', adEnabled: null }, tdStop = false;
+const EXTRA_MAX = 8;
+async function tdAnalyze(kw) {
+  const r = await fetch('/api/keyword?vendor=' + encodeURIComponent($('vname').value.trim()) + '&keyword=' + encodeURIComponent(kw));
+  if (r.status === 401) { showLogin(); throw new Error('login'); }
+  return r.json();
+}
+async function runToday() {
+  const base = $('kw-search').value.split('\n').map(x => x.replace(/^@+/, '').trim()).filter(Boolean);
+  if (!base.length) return alert('통검 노출 키워드 칸에 업체 키워드를 넣고 저장해 주세요.');
+  td = { rows: [], busy: true, msg: '', adEnabled: null }; tdStop = false; view = 'today'; render();
+  const related = [];
+  try {
+    for (let i = 0; i < base.length && !tdStop; i++) {
+      td.msg = '업체 키워드 분석 ' + (i + 1) + '/' + base.length + ' · ' + base[i]; render();
+      const a = await tdAnalyze(base[i]); a.source = '업체 키워드'; td.rows.push(a); (a.related || []).forEach(x => related.push(x)); render();
+    }
+    if (!tdStop) {
+      const r = await fetch('/api/keyword-candidates', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ vendor: $('vname').value.trim(), list: related, already: base }) });
+      const j = await r.json(); td.adEnabled = j.adEnabled;
+      const extra = (j.candidates || []).slice(0, EXTRA_MAX);
+      for (let i = 0; i < extra.length && !tdStop; i++) {
+        td.msg = '관련 키워드 분석 ' + (i + 1) + '/' + extra.length + ' · ' + extra[i]; render();
+        const a = await tdAnalyze(extra[i]); a.source = '관련 키워드'; td.rows.push(a); render();
+      }
+    }
+  } catch (e) { if (e.message !== 'login') td.msg = '중간에 멈춤: ' + e.message; }
+  td.busy = false; td.msg = tdStop ? '중지됨' : '완료 · ' + td.rows.length + '개 분석'; render();
+}
+function todaySummary() {
+  const btn = '<button class="main" id="tdBtn" style="flex:0 0 auto;padding:8px 18px"' + (td.busy ? ' disabled' : '') + '>' + (td.busy ? '분석 중…' : '오늘의 추천 만들기') + '</button>' + (td.busy ? ' <button class="sub" id="tdStop">중지</button>' : '');
+  return '<div style="width:100%;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + btn + '<span class="extra">' + esc(td.msg || '업체 키워드와 관련검색어 후보(최대 ' + EXTRA_MAX + '개)를 분석합니다. 키워드 하나에 10~20초.') + '</span></div>' +
+    '<div class="extra" style="width:100%">채널 기준(기본값): 어려움(상) → 외부블(건바이) · 중 → 외부블(체험) · 질문·추천형이고 상위에 카페 많음 → 외부카페 · 쉬움(하) → 공식 블로그 · 자사 5위 안 → 유지' + (td.adEnabled === false ? ' · 검색량: 검색광고 키 미설정' : '') + '</div>';
+}
+function todayRows() {
+  if (!td.rows.length) return '<tr><td colspan="7" class="empty">' + (td.busy ? '분석 중입니다…' : '[오늘의 추천 만들기]를 누르세요. 업체를 먼저 저장해 두어야 합니다.') + '</td></tr>';
+  const ok = td.rows.filter(r => !r.error && r.score > 0).sort((a, b) => b.score - a.score);
+  const keep = td.rows.filter(r => !r.error && r.channel && r.channel.indexOf('유지') === 0);
+  const out = td.rows.filter(r => !r.error && r.score === 0 && !(r.channel && r.channel.indexOf('유지') === 0));
+  const err = td.rows.filter(r => r.error);
+  const CH = { '외부블(건바이)': '#7b3fe4', '외부블(체험)': 'var(--blue)', '외부카페': 'var(--amber)', '공식 블로그': 'var(--gd)' };
+  const row = (r, i) => '<tr><td class="rank">' + (i == null ? '-' : i + 1) + '</td><td><a href="' + esc(r.url) + '" target="_blank"><b>' + esc(r.keyword) + '</b></a><div class="extra">' + esc(r.source || '') + (r.important ? ' · ' + '@'.repeat(r.important) : '') + '</div></td>' +
+    '<td style="font-weight:700;color:' + (CH[r.channel] || 'var(--sub)') + '">' + esc(r.channel || '-') + '</td><td class="rank">' + (r.score || 0) + '</td>' +
+    '<td>필요 ' + r.need + ' · 적합 ' + r.fit + '<div class="extra">난이도 ' + r.level + '(' + r.difficulty + ') · 카페 ' + r.cafe + '</div></td>' +
+    '<td>' + (r.volume == null ? '<span class="extra">-</span>' : r.volume.toLocaleString() + (r.comp ? '<div class="extra">경쟁 ' + esc(r.comp) + '</div>' : '')) + '</td>' +
+    '<td class="extra">' + (r.reasons || []).map(esc).join(' · ') + '</td></tr>';
+  let h = ok.map((r, i) => row(r, i)).join('');
+  if (keep.length) h += '<tr><td colspan="7" style="background:#f7f9fa;font-weight:700">유지 (자사 글이 이미 5위 안)</td></tr>' + keep.map(r => row(r, null)).join('');
+  if (out.length) h += '<tr><td colspan="7" style="background:#f7f9fa;font-weight:700">제외 (업체와 안 맞거나 다른 업체 이름·금지어 포함)</td></tr>' + out.map(r => row(r, null)).join('');
+  if (err.length) h += err.map(r => '<tr><td>-</td><td>' + esc(r.keyword) + '</td><td colspan="5" class="extra">' + esc(r.error) + '</td></tr>').join('');
+  return h;
+}
 function render() {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.k === view));
+  if (view === 'today') {
+    $('clipFilter').hidden = true;
+    $('thead').innerHTML = '<tr><th style="width:40px">순</th><th style="width:170px">키워드</th><th style="width:110px">추천 채널</th><th style="width:50px">점수</th><th style="width:150px">필요·적합·난이도</th><th style="width:80px">월 검색량</th><th>이유</th></tr>';
+    $('rows').innerHTML = todayRows();
+    $('summary').innerHTML = todaySummary();
+    $('tdBtn').onclick = runToday;
+    const st = $('tdStop'); if (st) st.onclick = () => { tdStop = true; };
+    return;
+  }
   if (view === 'review') {
     $('clipFilter').hidden = true;
     $('thead').innerHTML = '<tr><th style="width:50px">수준</th><th style="width:150px">항목</th><th>문장</th><th style="width:220px">고칠 방향</th></tr>';

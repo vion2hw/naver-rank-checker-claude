@@ -12,6 +12,7 @@ const store = require('./store.cjs');
 const { recommend, parseKw } = require('./recommend.cjs');
 const guide = require('./guide.cjs');
 const reviewer = require('./review.cjs');
+const keywordlab = require('./keywordlab.cjs');
 
 // 서버(호스팅) 모드: PORT 환경변수가 있으면 모든 주소(0.0.0.0)에서 받고, 자료는 DATA_DIR 에 둔다.
 const SERVER_MODE = !!process.env.PORT;
@@ -278,6 +279,23 @@ const server = http.createServer(async (req, res) => {
     try { return json(await p); } catch (e) { return json({ keyword: kw, error: '분석 중 오류: ' + e.message }, 500); }
   }
   // 원고 검수: POST { vendor, keyword, title, text, guide? } — 의료광고·지침 금지어·키워드·반복·자사 블로그 유사도
+  // 오늘의 추천: 키워드 하나 분석(난이도·카페 적합·업체 적합·필요도·채널). 대기열을 같이 써서 다른 조회와 겹치지 않게.
+  if (u.pathname === '/api/keyword') {
+    const v = (loadSettings().vendors || []).find(x => x.name === (u.searchParams.get('vendor') || ''));
+    if (!v) return json({ error: '저장된 업체가 아닙니다. 업체·키워드 저장 후 다시 하세요.' }, 404);
+    const kw = parseKw(u.searchParams.get('keyword') || '').keyword;
+    if (!kw) return json({ error: '키워드가 없습니다.' }, 400);
+    const p = queue.then(() => keywordlab.analyzeKeyword(kw, v, store.getHistory()));
+    queue = p.catch(() => {});
+    try { return json(await p); } catch (e) { return json({ keyword: kw, error: '분석 중 오류: ' + e.message }, 500); }
+  }
+  // 후보 키워드 고르기: POST { vendor, list:[관련 키워드], already:[이미 본 키워드] }
+  if (u.pathname === '/api/keyword-candidates' && req.method === 'POST') {
+    const b = await body(req);
+    const v = (loadSettings().vendors || []).find(x => x.name === (b.vendor || ''));
+    if (!v) return json({ error: '저장된 업체가 아닙니다.' }, 404);
+    return json({ candidates: keywordlab.pickCandidates(b.list || [], v, b.already || []), adEnabled: keywordlab.adEnabled() });
+  }
   if (u.pathname === '/api/review' && req.method === 'POST') {
     const b = await body(req);
     if (!String(b.text || '').trim()) return json({ error: '본문을 붙여 넣어 주세요.' }, 400);

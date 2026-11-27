@@ -244,7 +244,7 @@ const EXCLUDED_BLOCK = /^(플레이스|클립|광고|관련검색어|AI ?브리�
 async function checkSearch(keyword, targets, opt = {}) {
   const pages = 1; // 통검은 1페이지를 끝까지 스크롤한 범위만 본다.
   let page = await newPage();
-  const results = { status: '미노출', found: [], smart: [], blocks: [], list: [], listTotal: 0, url: 'https://m.search.naver.com/search.naver?query=' + encodeURIComponent(keyword) };
+  const results = { status: '미노출', found: [], smart: [], blocks: [], list: [], related: [], listTotal: 0, url: 'https://m.search.naver.com/search.naver?query=' + encodeURIComponent(keyword) };
   try {
     let listRank = 0; let blockNo = 0;
     for (let p = 1; p <= pages; p++) {
@@ -264,6 +264,7 @@ async function checkSearch(keyword, targets, opt = {}) {
         if (isList) for (const it of items) results.list.push({ rank: it.rank, type: it.type, title: it.title, link: it.href, source: it.source || '' });
         const mark = it => ({ ...it, by: matchAny((it.owner || '') + ' ' + it.href + (it.type === '플레이스' || it.type === '클립' ? ' ' + it.text : ''), targets) ? '자사 채널' : '외부 ' + it.type });
         const hits = excluded ? [] : items.filter(it => matchAny(it.text + ' ' + it.href + ' ' + (it.owner || ''), targets)).map(mark);
+        if (b.related) for (const t of b.related) if (!results.related.includes(t)) results.related.push(t);
         results.blocks.push({ page: p, no: shown ? blockNo : null, name: b.name, count: items.length, hit: hits.length, counted: isList,
           items: b.name === '클립' ? items.map(it => ({ pos: it.pos, title: it.title, href: it.href, mine: matchAny(it.text + ' ' + it.href, targets) })) : undefined });
         for (const h of hits) {
@@ -360,6 +361,8 @@ function extractSearchBlocks() {
       }
     } else if (ssuids.length === 1 && ssuids[0] === 'qra' || /^관련 검색어/.test(txt)) {
       name = '관련검색어'; skipRank = true;
+      // 관련검색어 글자들(키워드 추천 후보로 씀)
+      items = []; var related = [...c.querySelectorAll('a')].map(a => clean(a.innerText)).filter(t => t && t.length >= 2 && t.length <= 30 && !/관련s*검색어|더보기|닫기|열기/.test(t));
     } else if (/파워링크|광고/.test(txt.slice(0, 40)) && !ssuids.length || c.querySelector('.ad_area, [class*="powerlink"], a[href*="ader.naver.com"]') && !ssuids.some(s => s !== 'ad')) {
       name = '광고(파워링크)'; skipRank = true;
     } else {
@@ -396,7 +399,7 @@ function extractSearchBlocks() {
       name = head || (ssuids.includes('review') ? '블로그·카페' : ssuids[0] || '기타');
     }
     webRun = null;
-    blocks.push({ name, skipRank, items });
+    blocks.push({ name, skipRank, items, related: name === '관련검색어' ? related : undefined });
   }
   return blocks;
 }
